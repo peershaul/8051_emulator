@@ -1,0 +1,6 @@
+
+CC = gcc
+
+#begin_unique
+
+#end_unique

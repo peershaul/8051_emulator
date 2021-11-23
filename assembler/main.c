@@ -12,6 +12,9 @@
 
 #define LINE_LENGTH 256
 
+#define MOV_COMMAND 0x1
+#define CPL_COMMAND 0x2
+
 typedef struct Settings {
   const char *filepath;
   const char *outpath;
@@ -43,6 +46,17 @@ int64_t last_index_of(const char *parent, const char *child) {
           return i;
       }
     }
+  }
+
+  return -1;
+}
+
+int64_t index_of_ch(const char *parent, char child, uint64_t offset) {
+  int64_t index = offset;
+  while (parent[index] != '\0') {
+    if (parent[index] == child)
+      return index;
+    index++;
   }
 
   return -1;
@@ -123,6 +137,90 @@ void read_args(uint32_t argc, char **argv, Settings *settings) {
   }
 }
 
+uint8_t find_command(const char *command_string) {
+
+  if (last_index_of(command_string, "mov") != -1)
+    return MOV_COMMAND;
+
+  if (last_index_of(command_string, "cpl") != -1)
+    return CPL_COMMAND;
+
+  return 0;
+}
+
+void get_command_arguments(char **arg_outs, uint8_t n_of_commas,
+                           uint8_t space_place, char *line, int8_t *comma_pos) {
+  uint8_t length = strlen(line);
+
+  switch (n_of_commas) {
+  case 0: {
+    char *arg = (char *)malloc((length - space_place) * sizeof(char));
+    for (uint8_t i = space_place + 1; i < length; i++)
+      arg[i - space_place - 1] = line[i];
+
+    arg[length - space_place - 1] = '\0';
+    arg_outs[0] = arg;
+    return;
+  }
+  case 1: {
+    char *arg = (char *)malloc((comma_pos[0] - space_place) * sizeof(char));
+    for (uint8_t i = space_place + 1; i < comma_pos[0]; i++)
+      arg[i - space_place - 1] = line[i];
+    arg[comma_pos[0] - space_place] = '\0';
+    arg_outs[0] = arg;
+
+    arg = (char *)malloc((length - comma_pos[0] - 1) * sizeof(char));
+    for (uint8_t i = comma_pos[0] + 1; i < length; i++)
+      arg[i - comma_pos[0] - 2] = line[i];
+
+    arg[length - comma_pos[0] - 1] = '\0';
+    arg_outs[1] = arg;
+    return;
+  }
+  case 2: {
+    char *arg = (char *)malloc((comma_pos[0] - space_place) * sizeof(char));
+    for (uint8_t i = space_place + 1; i < comma_pos[0]; i++)
+      arg[i - space_place - 1] = line[i];
+    arg[comma_pos[0] - space_place] = '\0';
+    arg_outs[0] = arg;
+
+    arg = (char *)malloc((comma_pos[1] - comma_pos[0] - 1) * sizeof(char));
+    for (uint8_t i = comma_pos[0] + 1; i < comma_pos[1]; i++)
+      arg[i - comma_pos[0] - 2] = line[i];
+
+    arg[length - comma_pos[0] - 1] = '\0';
+    arg_outs[1] = arg;
+
+    arg = (char *)malloc((length - comma_pos[1] - 1) * sizeof(char));
+    for (uint8_t i = comma_pos[1] + 1; i < length; i++)
+      arg[i - comma_pos[1] - 2] = line[i];
+
+    arg[length - comma_pos[1] - 1] = '\0';
+    arg_outs[2] = arg;
+    return;
+  }
+  }
+}
+
+uint16_t number_from_immideate(const char *arg, uint8_t arg_length,
+                               bool is_immideate) {
+  char data[arg_length - is_immideate];
+  bool hexadecimal = arg[arg_length - 1] == 'h';
+  bool binary = arg[arg_length - 1] == 'b';
+
+  if (!hexadecimal && !binary) {
+    for (uint i = is_immideate; i < arg_length; i++)
+      data[i - is_immideate] = arg[i];
+
+    return atoi(data);
+  } else {
+    for (uint i = is_immideate; i < arg_length - 1; i++)
+      data[i - is_immideate] = arg[i];
+
+    return strtol(data, NULL, binary ? 2 : 16);
+  }
+}
+
 int main(int argc, char *argv[]) {
 
   Settings settings = {NULL, NULL};
@@ -135,6 +233,7 @@ int main(int argc, char *argv[]) {
 
   bool big_quit = false;
   bool small_quit = false;
+  uint16_t line_number = 0;
 
   Label labels[LINE_LENGTH];
   uint8_t length = 0;
@@ -166,58 +265,232 @@ int main(int argc, char *argv[]) {
     line[index] = '\0';
     printf("%s\n", line);
 
-    // THE MOV COMMAND
-    if (last_index_of(line, "mov") != -1) {
-      printf("mov detected\n");
-      int16_t a_detected = last_index_of(line, "a,");
-      int16_t data_detected = last_index_of(line, "#");
-      printf("is A: %d\n", a_detected);
-      printf("is data: %d\n", data_detected);
+    int8_t first_space = index_of_ch(line, ' ', 0);
+    char command_ch[first_space + 1];
 
-      // A and #data
-      if (a_detected != -1 && data_detected != -1) {
+    for (uint8_t i = 0; i < first_space; i++)
+      command_ch[i] = line[i];
 
-        // mov A, #data
-        if (a_detected < data_detected) {
-          fprintf(output, "%c", 0x74);
-          uint16_t length = strlen(line);
-          bool hexadecimal = last_index_of(line, "h") == length - 1;
-          bool binary = last_index_of(line, "b") == length - 1;
-          bool decimal = !binary && !hexadecimal;
-          uint8_t data_to_send;
+    command_ch[first_space] = '\0';
 
-          char ch_data[4];
-          uint8_t index = 0;
-          for (int16_t i = data_detected; i < length; i++) {
-            if (isxdigit(line[i]) && !binary)
-              ch_data[index++] = line[i];
-            else if (binary && (line[i] == '1' || line[i] == '0'))
-              ch_data[index++] = line[i];
-          }
+    printf("command: \"%s\"\n", command_ch);
+    uint8_t command = find_command(command_ch);
 
-          ch_data[index] = '\0';
+    printf("command found: %x\n", command);
 
-          printf("string data: %s\n", ch_data);
+    int8_t comma_pos[2] = {
+        index_of_ch(line, ',', first_space),
+        comma_pos[0] == -1 ? -1 : index_of_ch(line, ',', comma_pos[0] + 1)};
 
-          if (decimal) {
-            data_to_send = atoi(ch_data);
-            printf("Decimal\n");
-          } else if (hexadecimal) {
-            data_to_send = strtol(ch_data, NULL, 16);
-            printf("Hexadecimal\n");
-          } else if (binary) {
-            data_to_send = strtol(ch_data, NULL, 2);
-            printf("Binary\n");
-          }
+    uint8_t n_of_commas = 0;
+    if (comma_pos[0] != -1) {
+      n_of_commas = 1;
+      if (comma_pos[1] != -1)
+        n_of_commas = 2;
+    }
 
-          printf("actual data: %d\n", data_to_send);
-          fprintf(output, "%c", data_to_send);
-        }
+    printf("number of commas: %d\n", n_of_commas);
+
+    char *args[3] = {};
+    uint8_t arg_lengths[3] = {};
+
+    get_command_arguments(args, n_of_commas, first_space, line, comma_pos);
+    printf("args:\n");
+    for (uint8_t i = 0; i <= n_of_commas; i++) {
+      printf("\t%d: \"%s\"\n", i + 1, args[i]);
+      arg_lengths[i] = strlen(args[i]);
+    }
+
+    switch (command) {
+    case MOV_COMMAND: {
+
+      // mov A, #immediate
+      if (arg_lengths[0] == 1 && args[0][0] == 'a' && args[1][0] == '#') {
+        uint8_t data = number_from_immideate(args[1], arg_lengths[1], true);
+        printf("\nmov A, #%x\n", data);
+        printf("74, %2x\n", data);
+        fprintf(output, "%c%c", 0x74, data);
+        line_number += 2;
       }
+
+      // mov A, Ri
+      else if (arg_lengths[0] == 1 && args[0][0] == 'a' && args[1][0] == 'r') {
+        uint8_t rindex = atoi(&args[1][1]);
+        if (rindex > 7)
+          return -1;
+        printf("\nmov A, R%d\n", rindex);
+        uint8_t opcode = 0xe8 + rindex;
+        printf("%x\n", opcode);
+        fprintf(output, "%c", opcode);
+        line_number++;
+      }
+
+      // mov A
+      else if (arg_lengths[0] == 1 && args[0][0] == 'a' && args[1][0] == '@') {
+        uint8_t rindex = atoi(&args[1][2]);
+        if (rindex > 1)
+          return -1;
+        uint8_t opcode = 0xf6 + rindex;
+
+        printf("\nmov @R%d, A\n", rindex);
+        printf("%x\n", opcode);
+        fprintf(output, "%c", opcode);
+        line_number++;
+      }
+
+      // mov A, ram_addr
+      else if (arg_lengths[0] == 1 && args[0][0] == 'a') {
+        uint8_t data = number_from_immideate(args[1], arg_lengths[1], false);
+        printf("\nmov A, %x\n", data);
+        printf("e5, %2x\n", data);
+        fprintf(output, "%c%c", 0xe5, data);
+        line_number += 2;
+      }
+
+      // mov A, @Ri
+      else if (arg_lengths[1] == 1 && args[0][0] == 'r' && args[1][0] == 'a') {
+        uint8_t rindex = atoi(&args[0][1]);
+        if (rindex > 7)
+          return -1;
+        printf("\nmov A, @R%d\n", rindex);
+        uint8_t opcode = 0xe6 + rindex;
+        printf("%x\n", opcode);
+        fprintf(output, "%c", opcode);
+        line_number++;
+      }
+
+      // mov Ri, #immideate
+      else if (args[0][0] == 'r' && args[1][0] == '#') {
+        uint8_t rindex = atoi(&args[0][1]);
+        if (rindex > 7)
+          return -1;
+        uint8_t data = number_from_immideate(args[1], arg_lengths[1], true);
+        uint8_t opcode = 0x78 + rindex;
+        printf("\nmov R%d, #%xh\n", rindex, data);
+        printf("%x, %2x\n", opcode, data);
+        fprintf(output, "%c%c", opcode, data);
+        line_number += 2;
+      }
+
+      // mov Ri, ram_addr
+      else if (args[0][0] == 'r') {
+        uint8_t rindex = atoi(&args[0][1]);
+        if (rindex > 7)
+          return -1;
+        uint8_t data = number_from_immideate(args[1], arg_lengths[1], false);
+        uint8_t opcode = 0xa8 + rindex;
+        printf("\nmov R%d, %xh\n", rindex, data);
+        printf("%x, %2x\n", opcode, data);
+        fprintf(output, "%c%c", opcode, data);
+        line_number += 2;
+      }
+
+      // mov @Ri, A
+      else if (args[0][0] == '@' && args[1][0] == 'a' && arg_lengths[1] == 1) {
+        uint8_t rindex = atoi(&args[0][2]);
+        if (rindex > 1)
+          return -1;
+        uint8_t opcode = 0xa6 + rindex;
+
+        printf("\nmov @R%d, A\n", rindex);
+        printf("%x\n", opcode);
+        fprintf(output, "%c", opcode);
+        line_number++;
+      }
+
+      // mov @Ri, #immediate
+      else if (args[0][0] == '@' && args[1][0] == '#') {
+        uint8_t rindex = atoi(&args[0][2]);
+        if (rindex > 1)
+          return -1;
+        uint8_t opcode = 0x76 + rindex;
+        uint8_t data = number_from_immideate(args[1], arg_lengths[1], true);
+
+        printf("\nmov @R%d, #%XH\n", rindex, data);
+        printf("%x, %2x\n", opcode, data);
+        fprintf(output, "%c%c", opcode, data);
+        line_number += 2;
+      }
+
+      // mov @Ri, ram_addr
+      else if (args[0][0] == '@') {
+        uint8_t rindex = atoi(&args[0][2]);
+        if (rindex > 1)
+          return -1;
+        uint8_t opcode = 0xa6 + rindex;
+        uint8_t data = number_from_immideate(args[1], arg_lengths[1], false);
+
+        printf("\nmov @R%d, %XH\n", rindex, data);
+        printf("%x, %2x\n", opcode, data);
+        fprintf(output, "%c%c", opcode, data);
+        line_number += 2;
+      }
+
+      // mov ram_addr, A
+      else if (args[1][0] == 'a' && arg_lengths[1] == 1) {
+        uint8_t location =
+            number_from_immideate(args[0], arg_lengths[0], false);
+        printf("\nmov %XH, A\n", location);
+        printf("f5, %2x\n", location);
+        fprintf(output, "%c%c", 0xf5, location);
+        line_number += 2;
+      }
+
+      // mov ram_addr, @Ri 
+      else if (args[1][0] == '@') {
+	uint8_t rindex = atoi(&args[1][2]);
+	if(rindex > 1) return -1;
+	uint8_t location = number_from_immideate(args[0], arg_lengths[0], false);
+	uint8_t opcode = 0x86 + rindex;
+
+	printf("\nmov %XH, @R%d\n", location, rindex);
+	printf("%x, %2x\n", opcode, location);
+	fprintf(output, "%c%c", opcode, location);
+	line_number += 2;
+      }
+
+      // mov ram_addr, Ri
+      else if (args[1][0] == 'r') {
+        uint8_t rindex = atoi(&args[1][1]);
+	if(rindex > 7) return -1;
+	uint8_t location = number_from_immideate(args[0], arg_lengths[0], false);
+	uint8_t opcode = 0x88 + rindex;
+
+	printf("\nmov %XH, R%d\n", location, rindex);
+	printf("%x, %2x\n", opcode, location);
+	fprintf(output, "%c%c", opcode, location);
+	line_number += 2;
+      }
+
+      // mov ram_addr, #immediate
+      else if (args[1][0] == '#') {
+	uint8_t location = number_from_immideate(args[0], arg_lengths[0], false);
+	uint8_t data = number_from_immideate(args[1], arg_lengths[1], true);
+
+	printf("\nmov %XH, #%XH\n", location, data);
+	printf("75, %2x, %2x\n", location, data);
+	fprintf(output, "%c%c%c", 0x75, location, data);
+	line_number += 3;
+      }
+
+      // mov C, bit_addr
+      else if (args[0][0] == 'c' && arg_lengths[0] == 1) {
+	uint8_t location = number_from_immideate(args[1], arg_lengths[1], false);
+
+	printf("\nmov C, %XH\n", location);
+	printf("a2, %2x\n", location);
+	fprintf(output, "%c%c", 0xa2, location);
+	line_number += 2;
+      }
+
+      break;
+    }
     }
 
     printf("\n");
   }
+
+  printf("this program has %X lines\n", line_number);
 
   fclose(input);
   fclose(output);

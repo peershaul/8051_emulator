@@ -14,6 +14,21 @@
 
 #define MOV_COMMAND 0x1
 #define CPL_COMMAND 0x2
+#define NOP_COMMAND 0x3
+#define AJMP_COMMAND 0x4
+#define LJMP_COMMAND 0x5
+#define RR_COMMAND 0x6
+#define INC_COMMAND 0x7
+#define JBC_COMMAND 0x8
+#define ACALL_COMMAND 0x9
+#define LCALL_COAMMAND 0xa
+#define RRC_COMMAND 0xb
+#define DEC_COMMAND 0xc
+#define JB_COMMAND 0xd
+#define RET_COMMAND 0xe
+#define RL_COMMAND 0xf
+#define ADD_COMMAND 0x10
+// TODO Continue this shit 
 
 typedef struct Settings {
   const char *filepath;
@@ -481,6 +496,39 @@ int main(int argc, char *argv[]) {
 	printf("a2, %2x\n", location);
 	fprintf(output, "%c%c", 0xa2, location);
 	line_number += 2;
+      }
+
+      // mov bit_addr, C
+      else if (args[1][0] == 'c' && arg_lengths[1] == 1) {
+	uint8_t location = number_from_immideate(args[0], arg_lengths[0], false);
+
+	printf("\nmov %XH, C\n", location);
+	printf("92, %2x\n", location);
+	fprintf(output, "%c%c", 0x92, location);
+	line_number += 2;
+      }
+
+      // mov DPTR, #data16
+      else if (strcmp(args[0], "dptr") == 0) {
+	uint16_t location = number_from_immideate(args[1], arg_lengths[1], true);
+	uint8_t msb = location >> 8;
+	uint8_t lsb = location & 0xff;
+	
+	printf("\nmov DPTR, #%XH", location);
+	printf("90, %2x, %2x\n", lsb, msb);
+	fprintf(output, "%c%c%c", 0x90, lsb, msb);
+	line_number += 3;
+      }
+
+      // mov ram_addr, ram_addr
+      else {
+        uint8_t location_0 = number_from_immideate(args[0], arg_lengths[0], false);
+	uint8_t location_1 = number_from_immideate(args[1], arg_lengths[1], false);
+
+	printf("\nmov %XH, %XH\n", location_0, location_1);
+	printf("85, %2x, %2x\n", location_0, location_1);
+	fprintf(output, "%c%c%c", 0x85, location_0, location_1);
+	line_number += 3;
       }
 
       break;

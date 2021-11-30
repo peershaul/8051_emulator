@@ -1,3 +1,4 @@
-	;;  Just a proof of concept to see if it'll work
-	mov a, #1
-	rr a
+	mov A, #80H
+LOOP:
+	RLC A
+	JC LOOP 

@@ -51,6 +51,39 @@ uint8_t add_8bit(uint8_t value, bool carry, Memory *memory) {
   return result;
 }
 
+uint8_t sub_8bit(uint8_t value, Memory *memory) {
+  uint8_t acc = memory->data_regs[SFR_A].value;
+  bool carry = memory->data_regs[SFR_PSW].value & 0x80;
+  int16_t result = acc - value - carry;
+  
+  // Checking if the result is negative
+  if(result & 0x8000)
+    memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x80;
+  else
+    memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
+
+  uint8_t value_4b = value & 0x0f;
+  uint8_t acc_4b = acc & 0x0f;
+  int8_t result_4b = acc_4b - value_4b;
+
+  // Checking for a borrow in 4 lsb's
+  if(result & 0x80)
+    memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | (1 << 6);
+  else
+    memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & ~(1 << 6);
+
+  // Checking for the OV flag
+  uint8_t value_6b = value & 0x7f;
+  uint8_t acc_6b = acc & 0x7f;
+  int8_t result_6b = acc_6b - value_6b;
+  if((result_6b & 0x80) ^ (result & 0x8000))
+    memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x04;
+  else
+    memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & ~0x04;
+
+  return result;
+}
+
 SFR *get_sfr_by_bit(uint8_t address, uint8_t *offset, Memory *memory) {
   for (uint8_t i = 0; i < SFR_AMOUNT; i++)
     if (memory->data_regs[i].is_bit_addressable)
@@ -59,6 +92,7 @@ SFR *get_sfr_by_bit(uint8_t address, uint8_t *offset, Memory *memory) {
           *offset = j;
           return &memory->data_regs[i];
         }
+
   *offset = 8;
   return NULL;
 }
@@ -858,7 +892,10 @@ void run_program(Memory *memory) {
 	bit_status = sfr->value & (1 << offset);
       }
 
-      memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & (bit_status << 7);
+      if(bit_status && (memory->data_regs[SFR_A].value & 0x80))
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x80;
+      else
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
       break;
     }
 
@@ -913,6 +950,193 @@ void run_program(Memory *memory) {
       break;
     }
 
+    case 0x86:
+    case 0x87: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0x86;
+      uint8_t source_loc = memory->data_ram[r_index];
+      uint8_t source_val;
+      if(source_loc <= 0x7f)
+	source_val = memory->data_ram[source_loc];
+      else {
+	SFR* sfr = check_out_location(source_loc, memory);
+	if(sfr == NULL) {assert = true; break;}
+	source_val = sfr->value;
+      }
+
+      uint8_t dest_loc = memory->rom[++memory->instraction_reg];
+      if(dest_loc <= 0x7f)
+	memory->data_ram[dest_loc] = source_val;
+      else {
+        SFR *sfr = check_out_location(dest_loc, memory);
+        if(sfr == NULL) assert = true;
+	else sfr->value = source_val;
+      }
+
+      break;
+    }
+
+      
+      // MOV DPTR, #immideate
+    case 0x90: {
+      uint8_t msb = memory->rom[++memory->instraction_reg];
+      uint8_t lsb = memory->rom[++memory->instraction_reg];
+      memory->dptr = lsb | (msb << 8);
+      break;
+    }
+
+      // MOV bit, C
+    case 0x92: {
+      uint8_t bit = memory->rom[++memory->instraction_reg];
+      bool carry = memory->data_regs[SFR_PSW].value & 0x80;
+      if (bit <= 0x7f) {
+	uint8_t offset = bit % 8;
+	uint8_t location = bit / 8 + 0x20;
+	if(carry)
+	  memory->data_ram[location] = memory->data_ram[location] | (1 << offset);
+	else
+	  memory->data_ram[location] = memory->data_ram[location] & ~(1 << offset);
+      }
+      else{
+	uint8_t offset;
+	SFR* sfr = get_sfr_by_bit(bit, &offset, memory);
+	if(sfr == NULL) assert = true;
+	else if(carry) sfr->value = sfr->value | (1 << offset);
+	else sfr->value = sfr->value & ~(1 << offset);
+      }
+
+      break;
+    }
+
+      // MOVC A, @A+DPTR 
+    case 0x93:
+      memory->data_regs[SFR_A].value = memory->rom[memory->dptr + memory->data_regs[SFR_A].value];
+      break;
+
+      // SUBB A, #immideate
+    case 0x94: {
+      uint8_t value = memory->rom[++memory->instraction_reg];
+      memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      break;
+    }
+
+      // SUBB A, direct
+    case 0x95: {
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      uint8_t value;
+      if(location <= 0x7f)
+	value = memory->data_ram[location];
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) {assert = true; break;}
+	value = sfr->value;
+      }
+
+      memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      break;
+    }
+
+      // SUBB A, @Ri
+    case 0x96:
+    case 0x97: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0x96;
+      uint8_t location = memory->data_ram[r_index];
+      uint8_t value;
+
+      if(location <= 0x7f)
+	value = memory->data_ram[location];
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) {assert = true; break;}
+	value = sfr->value;
+      }
+
+      memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      break;
+    }
+
+    case 0x98:
+    case 0x99:
+    case 0x9a:
+    case 0x9b:
+    case 0x9c:
+    case 0x9d:
+    case 0x9e:
+    case 0x9f: {
+      uint8_t r_index = memory->rom[memory->instraction_reg];
+      uint8_t value = memory->data_ram[r_index];
+
+      memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      break;
+    }
+
+      // Kinda need to learn about /bit notation
+
+      // MOV C, bit
+    case 0xa2: {
+      uint8_t bit = memory->rom[++memory->instraction_reg];
+      bool state;
+      if (bit <= 0x7f) {
+	uint8_t location = bit / 8 + 0x20;
+	uint8_t offset = bit % 8;
+	state = memory->data_ram[location] & (1 << offset);
+      } else {
+	uint8_t offset;
+	SFR* sfr = get_sfr_by_bit(bit, &offset, memory);
+	state = sfr->value & (1 << offset);
+      }
+
+      if(state)
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x80;
+      else
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
+
+      break;
+    }
+
+      // INC DPTR
+    case 0xa3:
+      memory->dptr++;
+      break;
+
+      // MUL AB
+    case 0xa4:{
+      // Clear the carry bit
+      memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
+
+      uint16_t result = memory->data_regs[SFR_A].value * memory->data_regs[SFR_B].value;
+      if (result > 0xff) {
+        memory->data_regs[SFR_PSW].value =
+            memory->data_regs[SFR_PSW].value | 0x04;
+      }
+    }
+
+      // MOV @Ri, direct
+    case 0xa6:
+    case 0xa7: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xa6;
+      uint8_t source_loc = memory->rom[++memory->instraction_reg];
+      uint8_t source_val;
+      if(source_loc <= 0x7f)
+	source_val = memory->data_ram[source_loc];
+      else {
+	SFR* sfr = check_out_location(source_loc, memory);
+	if(sfr == NULL) {assert = true; break;}
+	source_val = sfr->value;
+      }
+
+      uint8_t dest_loc = memory->data_ram[r_index];
+      if(dest_loc <= 0x7f)
+	memory->data_ram[dest_loc] = source_val;
+      else {
+        SFR *sfr = check_out_location(dest_loc, memory);
+        if(sfr == NULL) assert = true;
+	else sfr->value = source_val;
+      }
+
+      break;
+    }
+
+      
       // MOV Rn, direct
     case 0xa8:
     case 0xa9:
@@ -939,6 +1163,350 @@ void run_program(Memory *memory) {
       break;
     }
 
+      // CPL bit
+    case 0xb2: {
+      uint8_t* bit_location;
+      uint8_t offset;
+      uint8_t bit = memory->rom[++memory->instraction_reg];
+
+      if (bit <= 0x7f) {
+	uint8_t location = bit / 8 + 0x20;
+	offset = bit % 8;
+	bit_location = &memory->data_ram[location];
+      } else {
+	SFR* sfr = get_sfr_by_bit(bit, &offset, memory);
+	bit_location = &sfr->value;
+      }
+
+      if(*bit_location & (1 << offset))
+	*bit_location = *bit_location & ~(1 << offset);
+      else
+	*bit_location = *bit_location | (1 << offset);
+
+      break;
+    }
+
+      // CPL C
+    case 0xb3: 
+      if(memory->data_regs[SFR_PSW].value & 0x80)
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
+      else
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x80;
+      break;
+
+      // CJNE A, #immideate, relative
+    case 0xb4: {
+      uint8_t data = memory->rom[++memory->instraction_reg];
+      int8_t relative = memory->rom[++memory->instraction_reg];
+      if(memory->data_regs[SFR_A].value != data)
+	memory->instraction_reg += relative;
+      break;
+    }
+
+      // CJNE A, direct, relative
+    case 0xb5: {
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      int8_t relative = memory->rom[++memory->instraction_reg];
+      uint8_t value;
+      
+      if(location <= 0x7f)
+	value = memory->data_ram[location];
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL){ assert = true; break; }
+	value = sfr->value;
+      }
+
+      if(memory->data_regs[SFR_A].value != value)
+	memory->instraction_reg += relative;
+      break;
+    }
+
+      // CJNE @Ri, #immideate, relative 
+    case 0xb6:
+    case 0xb7: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xb6;
+      uint8_t location = memory->data_ram[r_index];
+      uint8_t value1 = memory->rom[++memory->instraction_reg];
+      uint8_t value2;
+      int8_t relative = memory->rom[++memory->instraction_reg];
+
+      if(location <= 0x7f)
+	value2 = memory->data_ram[location];
+      else {
+	SFR* sfr = check_out_location(location, memory);
+        if (sfr == NULL) {
+          assert = true;
+          break;
+        }
+        value2 = sfr->value;
+      }
+
+      if(value1 != value2)
+	memory->instraction_reg += relative;
+
+      break;
+    }
+
+      // CJNE Rn, #immideate, relative
+    case 0xb8:
+    case 0xb9:
+    case 0xba:
+    case 0xbb:
+    case 0xbc:
+    case 0xbd:
+    case 0xbe:
+    case 0xbf: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xb8;
+      uint8_t r_value = memory->data_ram[r_index];
+      uint8_t i_value = memory->rom[++memory->instraction_reg];
+      int8_t relative = memory->rom[++memory->instraction_reg];
+
+      if(r_value != i_value)
+	memory->instraction_reg += relative;
+
+      break;
+    }
+
+      // CLR bit
+    case 0xc2: {
+      uint8_t bit = memory->rom[++memory->instraction_reg];
+      uint8_t offset;
+      uint8_t* value;
+      if (bit <= 0x7f) {
+	offset = bit % 8;
+	value = &memory->data_ram[bit / 8 + 0x20];
+      }
+      else 
+	value = &get_sfr_by_bit(bit, &offset, memory)->value;
+
+      *value = *value & ~(1 << offset);
+      break;
+    }
+
+      // CLR C
+    case 0xc3:
+      memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
+      break;
+
+      // SWAP A
+    case 0xc4: {
+      uint8_t lsb = memory->data_regs[SFR_A].value & 0x0f;
+      uint8_t msb = (memory->data_regs[SFR_A].value & 0xf0) >> 4;
+      memory->data_regs[SFR_A].value = (lsb << 4) | msb;
+      break;
+    }
+
+      // xch A, direct
+    case 0xc5: {
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      uint8_t* l_ptr;
+
+      if(location <= 0x7f)
+	l_ptr = &memory->data_ram[location];
+      else
+	l_ptr = &check_out_location(location, memory)->value;
+
+      uint8_t acc = memory->data_regs[SFR_A].value;
+      memory->data_regs[SFR_A].value = *l_ptr;
+      *l_ptr = acc;
+      break;
+    }
+
+      // xch A, @Ri
+    case 0xc6:
+    case 0xc7: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xc6;
+      uint8_t location = memory->data_ram[r_index];
+      uint8_t* l_ptr;
+
+      if(location <= 0x7f)
+	l_ptr = &memory->data_ram[location];
+      else
+	l_ptr = &check_out_location(location, memory)->value;
+
+      uint8_t acc = memory->data_regs[SFR_A].value;
+      memory->data_regs[SFR_A].value = *l_ptr;
+      *l_ptr = acc;
+      break;
+    }
+
+      // xch A, Rn
+    case 0xc8:
+    case 0xc9:
+    case 0xca:
+    case 0xcb:
+    case 0xcc:
+    case 0xcd:
+    case 0xce:
+    case 0xcf: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xc8;
+      uint8_t slot = memory->data_ram[r_index];
+      memory->data_ram[r_index] = memory->data_regs[SFR_A].value;
+      memory->data_regs[SFR_A].value = slot;
+
+      break;
+    }
+
+      // setb bit
+    case 0xd2: {
+      uint8_t bit = memory->rom[++memory->instraction_reg];
+      uint8_t offset;
+      uint8_t* slot;
+
+      if (bit <= 0x7f) {
+	offset = bit % 8;
+	slot = &memory->data_ram[bit / 8 + 0x20];
+      }
+      else 
+       slot = &get_sfr_by_bit(bit, &offset, memory)->value;
+
+      *slot = *slot | (1 << offset);
+      break;
+    }
+
+      // setb C
+    case 0xd3:
+      memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x80;
+      break;
+
+      // DA A
+    case 0xd4: {
+      uint8_t check = memory->data_regs[SFR_A].value & 0x0f;
+
+      if((memory->data_regs[SFR_PSW].value & 0x40) || (check > 9))
+	memory->data_regs[SFR_A].value += 6;
+
+      check = (memory->data_regs[SFR_A].value & 0xf0) >> 4;
+      if((memory->data_regs[SFR_PSW].value & 0x80) || (check > 9))
+	memory->data_regs[SFR_A].value += 0x60;
+
+      if(memory->data_regs[SFR_A].value > 0x99)
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | 0x80;
+      else
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
+
+      break;
+    }
+
+      // DJNZ direct, relative 
+    case 0xd5:{
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      int8_t relative = memory->rom[++memory->instraction_reg];
+      uint8_t* value;
+
+      if(location <= 0x7f)
+	value = &memory->data_ram[location];
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) { assert = true; break; }
+	value = &sfr->value;
+      }
+
+      *value -= 1;
+      if(*value != 0)
+	memory->instraction_reg += relative;
+
+      break;
+    }
+
+      // XCHD A, @Ri
+    case 0xd6:
+    case 0xd7: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xd6;
+      uint8_t location = memory->data_ram[r_index];
+      uint8_t* replace;
+
+      if(location <= 0x7f)
+	replace = &memory->data_ram[location];
+
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) { assert = true; break; }
+	replace = &sfr->value;
+      }
+
+      uint8_t replace_msb = *replace & 0xf0;
+      uint8_t replace_lsb = *replace & 0x0f;
+      uint8_t acc_msb = memory->data_regs[SFR_A].value & 0xf0;
+      uint8_t acc_lsb = memory->data_regs[SFR_A].value & 0x0f;
+
+      memory->data_regs[SFR_A].value = acc_msb | replace_lsb;
+      *replace = replace_msb | acc_lsb;
+
+      break;
+    }
+
+      // DJNZ Rn, relative
+    case 0xd8:
+    case 0xd9:
+    case 0xda:
+    case 0xdb:
+    case 0xdc:
+    case 0xdd:
+    case 0xde:
+    case 0xdf: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xd8;
+      int8_t relative = memory->rom[++memory->instraction_reg];
+
+      memory->data_ram[r_index]--;
+      if(memory->data_ram[r_index] != 0)
+	memory->instraction_reg += relative;
+
+      break;
+    }
+
+      // MOVX A, @DPTR
+    case 0xe0: 
+      memory->data_regs[SFR_A].value = memory->xdata_ram[memory->dptr];
+      break;
+
+      // MOVX A, @Ri
+    case 0xe2:
+    case 0xe3: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe2;
+      memory->data_regs[SFR_A].value = memory->xdata_ram[memory->data_ram[r_index]];
+      break;
+    }
+
+      // CLR A
+    case 0xe4: 
+      memory->data_regs[SFR_A].value = 0;
+      break;
+
+      // MOV A, direct
+    case 0xe5: {
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      if (location <= 0x7f)
+        memory->data_regs[SFR_A].value = memory->data_ram[location];
+
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) assert = true;
+	else memory->data_regs[SFR_A].value = sfr->value;
+      }
+
+      break;
+    }
+
+    case 0xe6:
+    case 0xe7: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe6;
+      uint8_t location = memory->data_ram[r_index];
+      if (location <= 0x7f)
+        memory->data_regs[SFR_A].value = memory->data_ram[location];
+
+      else {
+        SFR *sfr = check_out_location(location, memory);
+        if (sfr == NULL)
+          assert = true;
+        else
+          memory->data_regs[SFR_A].value = sfr->value;
+      }
+
+      break;
+    }
+      
       // MOV A, Rn
     case 0xe8:
     case 0xe9:
@@ -950,6 +1518,56 @@ void run_program(Memory *memory) {
     case 0xef: {
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe8;
       memory->data_regs[SFR_A].value = memory->data_ram[r_index];
+      break;
+    }
+
+      // MOVX @DPTR, A
+    case 0xf0:
+      memory->xdata_ram[memory->dptr] = memory->data_regs[SFR_A].value;
+      break;
+
+      // MOVX @Ri, A
+    case 0xf2:
+    case 0xf3: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xf2;
+      memory->xdata_ram[memory->data_ram[r_index]] = memory->data_regs[SFR_A].value;
+      break;
+    }
+
+      // CPL A
+    case 0xf4:
+      memory->data_regs[SFR_A].value = ~memory->data_regs[SFR_A].value;
+      break;
+
+      // MOV direct, A
+    case 0xf5: {
+      uint8_t location = memory->rom[++memory->instraction_reg];
+
+      if (location <= 0x7f)
+        memory->data_ram[location] = memory->data_regs[SFR_A].value;
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) assert = true;
+	else sfr->value = memory->data_regs[SFR_A].value;
+      }
+
+      break;
+    }
+
+      // MOV @Ri, A
+    case 0xf6:
+    case 0xf7: {
+      uint8_t r_index = memory->rom[memory->instraction_reg] - 0xf6;
+      uint8_t location = memory->data_ram[r_index];
+
+      if (location <= 0x7f)
+        memory->data_ram[location] = memory->data_regs[SFR_A].value;
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) assert = true;
+	else sfr->value = memory->data_regs[SFR_A].value;
+      }
+
       break;
     }
 
@@ -970,10 +1588,11 @@ void run_program(Memory *memory) {
     default:
       fprintf(stderr, "Unknown opcode: %x\n",
               memory->rom[memory->instraction_reg]);
+
       #ifdef ASSERT_WHEN_UNKNOWN
       assert = true;
       #endif
-      
+   
       break;
     }
 

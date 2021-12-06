@@ -8,6 +8,5 @@
 	  git clone https://github.com/peershaul/8051_emulator.git
 	  cd 8051_emulator/emulator
 	  make
-
    #+END_SRC
-
+** If you want to contirbute and help feel free to do so 

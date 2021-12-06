@@ -1,0 +1,13 @@
+* An Open Source 8051 Emulator
+  This open source project will emulate the behaviour of the Intel 8051 microcontroller.
+  For the development of the project I used the a51 assembly which is also an opensource project on https://github.com/tmikov/a51.git
+** Current State
+   In the current state the emulator is expirimental and doesnt include register paging and 3 commands and they are: (RETI), (ORL /bit, C) and (ANL /bit, C)
+** Compilation
+   #+BEGIN_SRC bash
+	  git clone https://github.com/peershaul/8051_emulator.git
+	  cd 8051_emulator/emulator
+	  make
+
+   #+END_SRC
+

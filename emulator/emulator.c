@@ -67,7 +67,7 @@ uint8_t sub_8bit(uint8_t value, Memory *memory) {
   int8_t result_4b = acc_4b - value_4b;
 
   // Checking for a borrow in 4 lsb's
-  if(result & 0x80)
+  if(result_4b & 0x80)
     memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | (1 << 6);
   else
     memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & ~(1 << 6);
@@ -112,6 +112,23 @@ void run_program(Memory *memory) {
       // NOP
     case 0x00:
       break;
+
+      // AJMP code address
+    case 0x01:
+    case 0x21:
+    case 0x41:
+    case 0x61:
+    case 0x81:
+    case 0xa1:
+    case 0xc1:
+    case 0xe1: {
+      uint8_t page = (memory->rom[memory->instraction_reg] & 0xe0) >> 5;
+      uint8_t lsb = memory->rom[++memory->instraction_reg];
+
+      memory->instraction_reg = (memory->instraction_reg + 2) & 0xf800;
+      memory->instraction_reg = memory->instraction_reg | lsb | (page << 8);
+      break;
+    }
 
       // LJMP address
     case 0x02: {
@@ -212,6 +229,45 @@ void run_program(Memory *memory) {
           break;
       }
     }
+
+      // ACALL code address
+    case 0x11:
+    case 0x31:
+    case 0x51:
+    case 0x71:
+    case 0x91:
+    case 0xb1:
+    case 0xd1:
+    case 0xf1:{
+      uint8_t page = (memory->rom[memory->instraction_reg] & 0xe0);
+      uint8_t jmp_lsb = memory->rom[++memory->instraction_reg];
+
+      memory->instraction_reg++;
+      
+      memory->data_ram[++memory->data_regs[SFR_SP].value] = memory->instraction_reg & 0x00ff;
+      memory->data_ram[++memory->data_regs[SFR_SP].value] =
+	(memory->instraction_reg & 0xff00) >> 8; 
+
+      memory->instraction_reg = (memory->instraction_reg & 0xf800) | jmp_lsb | (page << 3);
+      break;
+    }
+      
+      // LCALL code address 
+    case 0x12:{
+      uint8_t lsb = memory->rom[++memory->instraction_reg];
+      uint8_t msb = memory->rom[++memory->instraction_reg];
+
+      memory->instraction_reg++;
+
+      memory->data_ram[++memory->data_regs[SFR_SP].value] = memory->instraction_reg & 0x00ff;
+      memory->data_ram[++memory->data_regs[SFR_SP].value] =
+	(memory->instraction_reg & 0xff00) >> 8;
+
+      memory->instraction_reg = lsb | (msb << 8);
+      break;
+    }
+
+
       // RRC A
     case 0x13: {
       uint8_t acc = memory->data_regs[SFR_A].value;
@@ -296,6 +352,14 @@ void run_program(Memory *memory) {
       break;
     }
 
+
+      // RET
+    case 0x22:{
+      uint8_t msb = memory->data_ram[--memory->data_regs[SFR_SP].value];
+      uint8_t lsb = memory->data_ram[--memory->data_regs[SFR_SP].value];
+      memory->instraction_reg = lsb | (msb << 8);
+    }
+      
       // RL A
     case 0x23: {
       uint8_t msb = memory->data_regs[SFR_A].value & 0x80;
@@ -1268,6 +1332,23 @@ void run_program(Memory *memory) {
       break;
     }
 
+      // PUSH direct
+    case 0xc0:{
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      uint8_t value;
+      
+      if(location <= 0x7f)
+	value = memory->data_ram[location];
+      else {
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) { assert = true; break; }
+	value = sfr->value;
+      }
+
+      memory->data_ram[++memory->data_regs[SFR_SP].value] = value;
+      break;
+    }
+
       // CLR bit
     case 0xc2: {
       uint8_t bit = memory->rom[++memory->instraction_reg];
@@ -1345,6 +1426,24 @@ void run_program(Memory *memory) {
       memory->data_ram[r_index] = memory->data_regs[SFR_A].value;
       memory->data_regs[SFR_A].value = slot;
 
+      break;
+    }
+
+      // POP direct 
+    case 0xd0:{
+      uint8_t location = memory->rom[++memory->instraction_reg];
+      uint8_t* drop_location;
+
+      if(location <= 0x7f)
+	drop_location = &memory->data_ram[location];
+
+      else{
+	SFR* sfr = check_out_location(location, memory);
+	if(sfr == NULL) { assert = true; break; }
+	drop_location = &sfr->value;
+      }
+
+      *drop_location = memory->data_ram[memory->data_regs[SFR_SP].value--];
       break;
     }
 

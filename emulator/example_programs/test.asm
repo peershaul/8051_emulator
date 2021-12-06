@@ -1,5 +1,14 @@
-	mov B, #0FFH
-	mov A, #0
-LOOP:
+	ORG 0H
 	inc A
-	djnz B, LOOP
+	AJMP HEY
+
+	ORG 130H
+HEY:	
+	mov R2, #0FFH
+	mov B, #0f0h
+	add A, B
+	sjmp $
+	END
+
+
+

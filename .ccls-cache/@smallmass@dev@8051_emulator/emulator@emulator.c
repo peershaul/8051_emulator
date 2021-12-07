@@ -67,7 +67,7 @@ uint8_t sub_8bit(uint8_t value, Memory *memory) {
   int8_t result_4b = acc_4b - value_4b;
 
   // Checking for a borrow in 4 lsb's
-  if(result & 0x80)
+  if(result_4b & 0x80)
     memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | (1 << 6);
   else
     memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & ~(1 << 6);

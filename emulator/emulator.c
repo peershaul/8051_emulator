@@ -173,8 +173,9 @@ void run_program(Memory *memory) {
       // INC @Ri
     case 0x06:
     case 0x07: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x06;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + 8 * page];
       if (location <= 0x7f)
         memory->xdata_ram[location]++;
       else {
@@ -196,8 +197,9 @@ void run_program(Memory *memory) {
     case 0x0d:
     case 0x0e:
     case 0x0f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x08;
-      memory->data_ram[r_index]++;
+      memory->data_ram[r_index + page * 8]++;
       break;
     }
 
@@ -310,8 +312,9 @@ void run_program(Memory *memory) {
       // DEC @Ri
     case 0x16:
     case 0x17: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x16;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + 8 * page];
       memory->data_ram[location]--;
     }
 
@@ -324,8 +327,9 @@ void run_program(Memory *memory) {
     case 0x1d:
     case 0x1e:
     case 0x1f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x18;
-      memory->data_ram[r_index]--;
+      memory->data_ram[r_index + page * 8]--;
     }
 
       // JB bit_addr, relative
@@ -398,8 +402,9 @@ void run_program(Memory *memory) {
       // ADD A, @Ri
     case 0x26:
     case 0x27: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3; 
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x26;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
       uint8_t value;
 
       if (location <= 0x7f)
@@ -426,8 +431,9 @@ void run_program(Memory *memory) {
     case 0x2d:
     case 0x2e:
     case 0x2f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x28;
-      uint8_t value = memory->data_ram[r_index];
+      uint8_t value = memory->data_ram[r_index + page * 8];
       memory->data_regs[SFR_A].value = add_8bit(value, 0, memory);
       break;
     }
@@ -509,9 +515,10 @@ void run_program(Memory *memory) {
       // ADDC A, @Ri
     case 0x36:
     case 0x37: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x36;
       bool carry_flag = memory->data_regs[SFR_PSW].value & 0x80;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
       uint8_t value;
 
       if (location <= 0x7f)
@@ -539,9 +546,10 @@ void run_program(Memory *memory) {
     case 0x3d:
     case 0x3e:
     case 0x3f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x38;
       bool carry_flag = memory->data_regs[SFR_PSW].value & 0x80;
-      uint8_t value = memory->data_ram[r_index];
+      uint8_t value = memory->data_ram[r_index + page * 8];
 
       memory->data_regs[SFR_A].value = add_8bit(value, carry_flag, memory);
       break;
@@ -618,8 +626,9 @@ void run_program(Memory *memory) {
       // ORL A, @Ri
     case 0x46:
     case 0x47: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x46;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + 8 * page];
 
       if (location <= 0x7f)
         memory->data_regs[SFR_A].value =
@@ -646,9 +655,10 @@ void run_program(Memory *memory) {
     case 0x4d:
     case 0x4e:
     case 0x4f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x48;
       memory->data_regs[SFR_A].value =
-          memory->data_regs[SFR_A].value | memory->data_ram[r_index];
+          memory->data_regs[SFR_A].value | memory->data_ram[r_index + page * 8];
       break;
     }
 
@@ -723,8 +733,9 @@ void run_program(Memory *memory) {
       // ANL A, @Ri
     case 0x56:
     case 0x57: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x46;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
 
       if (location <= 0x7f)
         memory->data_regs[SFR_A].value =
@@ -751,9 +762,10 @@ void run_program(Memory *memory) {
     case 0x5d:
     case 0x5e:
     case 0x5f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x48;
       memory->data_regs[SFR_A].value =
-          memory->data_regs[SFR_A].value & memory->data_ram[r_index];
+          memory->data_regs[SFR_A].value & memory->data_ram[r_index + page * 8];
       break;
     }
 
@@ -819,6 +831,7 @@ void run_program(Memory *memory) {
       // XRL A, @Ri
     case 0x65:
     case 0x66:{
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x46;
       uint8_t location = memory->data_ram[r_index];
 
@@ -847,6 +860,7 @@ void run_program(Memory *memory) {
     case 0x6d:
     case 0x6e:
     case 0x6f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x48;
       memory->data_regs[SFR_A].value =
           memory->data_regs[SFR_A].value ^ memory->data_ram[r_index];
@@ -907,8 +921,9 @@ void run_program(Memory *memory) {
       // MOV @Ri, #immideate
     case 0x76:
     case 0x77: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x76;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + 8 * page];
       if(location <= 0x7f)
 	memory->data_ram[location] = memory->rom[++memory->instraction_reg];
       else {
@@ -928,8 +943,9 @@ void run_program(Memory *memory) {
     case 0x7d:
     case 0x7e:
     case 0x7f: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x78;
-      memory->data_ram[r_index] = memory->rom[++memory->instraction_reg];
+      memory->data_ram[r_index + 8 * page] = memory->rom[++memory->instraction_reg];
       break;
     }
 
@@ -1102,8 +1118,9 @@ void run_program(Memory *memory) {
       // SUBB A, @Ri
     case 0x96:
     case 0x97: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x96;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + 8 * page];
       uint8_t value;
 
       if(location <= 0x7f)
@@ -1133,7 +1150,31 @@ void run_program(Memory *memory) {
       break;
     }
 
-      // Kinda need to learn about /bit notation
+      // ORL C, /bit 
+    case 0xa0:{
+      uint8_t bit_addr = memory->rom[++memory->instraction_reg];
+      
+
+      if(!(memory->data_regs[SFR_PSW].value & 0x80)){
+	bool inv_state;
+	uint8_t offset;
+	
+	if(bit_addr <= 0x7f){
+	  uint8_t location = bit_addr / 8 + 0x20;
+	  offset = bit_addr % 8;
+	  inv_state = !(memory->data_ram[location] & (1 << offset));
+	}
+
+	else{
+	  SFR* sfr = get_sfr_by_bit(bit_addr, &offset, memory);
+	  inv_state = !(sfr->value & (1 << offset));
+	}
+
+	memory->data_regs[SFR_A].value = memory->data_regs[SFR_A].value | (inv_state << 7);
+      }
+
+      break;
+    }
 
       // MOV C, bit
     case 0xa2: {
@@ -1177,6 +1218,7 @@ void run_program(Memory *memory) {
       // MOV @Ri, direct
     case 0xa6:
     case 0xa7: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xa6;
       uint8_t source_loc = memory->rom[++memory->instraction_reg];
       uint8_t source_val;
@@ -1188,7 +1230,7 @@ void run_program(Memory *memory) {
 	source_val = sfr->value;
       }
 
-      uint8_t dest_loc = memory->data_ram[r_index];
+      uint8_t dest_loc = memory->data_ram[r_index + page * 8];
       if(dest_loc <= 0x7f)
 	memory->data_ram[dest_loc] = source_val;
       else {
@@ -1210,11 +1252,12 @@ void run_program(Memory *memory) {
     case 0xad:
     case 0xae:
     case 0xaf: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xa8;
       uint8_t location = memory->rom[++memory->instraction_reg];
 
       if (location <= 0x7f)
-        memory->data_ram[r_index] = memory->data_ram[location];
+        memory->data_ram[r_index + page * 8] = memory->data_ram[location];
 
       else {
         SFR *sfr = check_out_location(location, memory);
@@ -1222,8 +1265,28 @@ void run_program(Memory *memory) {
         if (sfr == NULL)
           assert = true;
         else
-          memory->data_ram[r_index] = sfr->value;
+          memory->data_ram[r_index + page * 8] = sfr->value;
       }
+      break;
+    }
+
+    case 0xb0:{
+      uint8_t bit_addr = memory->rom[++memory->instraction_reg];
+      if(memory->data_regs[SFR_PSW].value & 0x80){
+	uint8_t offset;
+	bool state;
+	
+	if(bit_addr <= 0x7f){
+	  uint8_t location = bit_addr / 8 + 0x20;
+	  offset = bit_addr % 8;
+	  state = memory->data_ram[location] & (1 << offset);
+	}
+
+	else state = get_sfr_by_bit(bit_addr, &offset, memory)->value & (1 << offset);
+
+	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value | (state << 7);
+      }
+
       break;
     }
 
@@ -1289,8 +1352,9 @@ void run_program(Memory *memory) {
       // CJNE @Ri, #immideate, relative 
     case 0xb6:
     case 0xb7: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xb6;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
       uint8_t value1 = memory->rom[++memory->instraction_reg];
       uint8_t value2;
       int8_t relative = memory->rom[++memory->instraction_reg];
@@ -1321,8 +1385,9 @@ void run_program(Memory *memory) {
     case 0xbd:
     case 0xbe:
     case 0xbf: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xb8;
-      uint8_t r_value = memory->data_ram[r_index];
+      uint8_t r_value = memory->data_ram[r_index + 8 * page];
       uint8_t i_value = memory->rom[++memory->instraction_reg];
       int8_t relative = memory->rom[++memory->instraction_reg];
 
@@ -1397,8 +1462,9 @@ void run_program(Memory *memory) {
       // xch A, @Ri
     case 0xc6:
     case 0xc7: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xc6;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
       uint8_t* l_ptr;
 
       if(location <= 0x7f)
@@ -1421,9 +1487,10 @@ void run_program(Memory *memory) {
     case 0xcd:
     case 0xce:
     case 0xcf: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xc8;
-      uint8_t slot = memory->data_ram[r_index];
-      memory->data_ram[r_index] = memory->data_regs[SFR_A].value;
+      uint8_t slot = memory->data_ram[r_index + page * 8];
+      memory->data_ram[r_index + page * 8] = memory->data_regs[SFR_A].value;
       memory->data_regs[SFR_A].value = slot;
 
       break;
@@ -1512,8 +1579,9 @@ void run_program(Memory *memory) {
       // XCHD A, @Ri
     case 0xd6:
     case 0xd7: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xd6;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
       uint8_t* replace;
 
       if(location <= 0x7f)
@@ -1545,11 +1613,12 @@ void run_program(Memory *memory) {
     case 0xdd:
     case 0xde:
     case 0xdf: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xd8;
       int8_t relative = memory->rom[++memory->instraction_reg];
 
-      memory->data_ram[r_index]--;
-      if(memory->data_ram[r_index] != 0)
+      memory->data_ram[r_index + page * 8]--;
+      if(memory->data_ram[r_index + page * 8] != 0)
 	memory->instraction_reg += relative;
 
       break;
@@ -1563,8 +1632,9 @@ void run_program(Memory *memory) {
       // MOVX A, @Ri
     case 0xe2:
     case 0xe3: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe2;
-      memory->data_regs[SFR_A].value = memory->xdata_ram[memory->data_ram[r_index]];
+      memory->data_regs[SFR_A].value = memory->xdata_ram[memory->data_ram[r_index + 8 * page]];
       break;
     }
 
@@ -1615,8 +1685,9 @@ void run_program(Memory *memory) {
     case 0xed:
     case 0xee:
     case 0xef: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe8;
-      memory->data_regs[SFR_A].value = memory->data_ram[r_index];
+      memory->data_regs[SFR_A].value = memory->data_ram[r_index + 8 * page];
       break;
     }
 
@@ -1628,8 +1699,9 @@ void run_program(Memory *memory) {
       // MOVX @Ri, A
     case 0xf2:
     case 0xf3: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xf2;
-      memory->xdata_ram[memory->data_ram[r_index]] = memory->data_regs[SFR_A].value;
+      memory->xdata_ram[memory->data_ram[r_index + page * 8]] = memory->data_regs[SFR_A].value;
       break;
     }
 
@@ -1656,8 +1728,9 @@ void run_program(Memory *memory) {
       // MOV @Ri, A
     case 0xf6:
     case 0xf7: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xf6;
-      uint8_t location = memory->data_ram[r_index];
+      uint8_t location = memory->data_ram[r_index + page * 8];
 
       if (location <= 0x7f)
         memory->data_ram[location] = memory->data_regs[SFR_A].value;
@@ -1679,8 +1752,9 @@ void run_program(Memory *memory) {
     case 0xfd:
     case 0xfe:
     case 0xff: {
+      uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xf8;
-      memory->data_ram[r_index] = memory->data_regs[SFR_A].value;
+      memory->data_ram[r_index + 8 * page] = memory->data_regs[SFR_A].value;
       break;
     }
 

@@ -12,6 +12,19 @@ SFR *check_out_location(uint8_t location, Memory *memory) {
   return NULL;
 }
 
+void calculate_parity(Memory* memory){
+  uint8_t acc = memory->data_regs[SFR_A].value;
+  uint8_t number_of_ones = 0;
+  
+  while(acc != 0){
+    number_of_ones += acc & 0x1;
+    acc = acc >> 1;
+  }
+
+  memory->data_regs[SFR_PSW].value = (memory->data_regs[SFR_PSW].value & 0xfe)
+    | (number_of_ones & 0x1);
+}
+
 uint8_t add_8bit(uint8_t value, bool carry, Memory *memory) {
 
   // Calculating 8bit result
@@ -145,12 +158,14 @@ void run_program(Memory *memory) {
       memory->data_regs[SFR_A].value = memory->data_regs[SFR_A].value >> 1;
       memory->data_regs[SFR_A].value =
           memory->data_regs[SFR_A].value | (lsb << 7);
+      calculate_parity(memory);
       break;
     }
 
       // INC A
     case 0x04: {
       memory->data_regs[SFR_A].value++;
+      calculate_parity(memory);
       break;
     }
 
@@ -287,12 +302,14 @@ void run_program(Memory *memory) {
             memory->data_regs[SFR_PSW].value & ~0x80;
 
       memory->data_regs[SFR_A].value = acc;
+      calculate_parity(memory);
       break;
     }
 
       // DEC A
     case 0x14:
       memory->data_regs[SFR_A].value--;
+      calculate_parity(memory);
       break;
 
       // DEC direct
@@ -377,6 +394,7 @@ void run_program(Memory *memory) {
     case 0x24: {
       uint8_t value = memory->rom[++memory->instraction_reg];
       memory->data_regs[SFR_A].value = add_8bit(value, 0, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -419,6 +437,7 @@ void run_program(Memory *memory) {
       }
 
       memory->data_regs[SFR_A].value = add_8bit(value, 0, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -435,6 +454,7 @@ void run_program(Memory *memory) {
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x28;
       uint8_t value = memory->data_ram[r_index + page * 8];
       memory->data_regs[SFR_A].value = add_8bit(value, 0, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -459,6 +479,7 @@ void run_program(Memory *memory) {
         if (!(sfr->value & (1 << offset)))
           memory->instraction_reg += relative;
       }
+      calculate_parity(memory);
       break;
     }
 
@@ -479,6 +500,7 @@ void run_program(Memory *memory) {
             memory->data_regs[SFR_PSW].value & ~0x80;
 
       memory->data_regs[SFR_A].value = acc;
+      calculate_parity(memory);
       break;
     }
 
@@ -487,6 +509,7 @@ void run_program(Memory *memory) {
       uint8_t value = memory->rom[++memory->instraction_reg];
       bool carry_flag = memory->data_regs[SFR_PSW].value & 0x80;
       memory->data_regs[SFR_A].value = add_8bit(value, carry_flag, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -509,6 +532,7 @@ void run_program(Memory *memory) {
       }
 
       memory->data_regs[SFR_A].value = add_8bit(value, carry_flag, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -534,6 +558,7 @@ void run_program(Memory *memory) {
       }
 
       memory->data_regs[SFR_A].value = add_8bit(value, carry_flag, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -552,6 +577,7 @@ void run_program(Memory *memory) {
       uint8_t value = memory->data_ram[r_index + page * 8];
 
       memory->data_regs[SFR_A].value = add_8bit(value, carry_flag, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -602,6 +628,7 @@ void run_program(Memory *memory) {
     case 0x44: {
       memory->data_regs[SFR_A].value = memory->data_regs[SFR_A].value |
                                        memory->rom[++memory->instraction_reg];
+      calculate_parity(memory);
       break;
     }
 
@@ -643,6 +670,7 @@ void run_program(Memory *memory) {
               memory->data_regs[SFR_A].value | sfr->value;
       }
 
+      calculate_parity(memory);
       break;
     }
 
@@ -659,6 +687,7 @@ void run_program(Memory *memory) {
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x48;
       memory->data_regs[SFR_A].value =
           memory->data_regs[SFR_A].value | memory->data_ram[r_index + page * 8];
+      calculate_parity(memory);
       break;
     }
 
@@ -709,6 +738,7 @@ void run_program(Memory *memory) {
     case 0x54: {
       memory->data_regs[SFR_A].value = memory->data_regs[SFR_A].value &
                                        memory->rom[++memory->instraction_reg];
+      calculate_parity(memory);
       break;
     }
 
@@ -727,6 +757,7 @@ void run_program(Memory *memory) {
           memory->data_regs[SFR_A].value =
               memory->data_regs[SFR_A].value & sfr->value;
       }
+      calculate_parity(memory);
       break;
     }
 
@@ -750,6 +781,7 @@ void run_program(Memory *memory) {
               memory->data_regs[SFR_A].value & sfr->value;
       }
 
+      calculate_parity(memory);
       break;
     }
 
@@ -766,6 +798,7 @@ void run_program(Memory *memory) {
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x48;
       memory->data_regs[SFR_A].value =
           memory->data_regs[SFR_A].value & memory->data_ram[r_index + page * 8];
+      calculate_parity(memory);
       break;
     }
 
@@ -825,6 +858,7 @@ void run_program(Memory *memory) {
           memory->data_regs[SFR_A].value =
               memory->data_regs[SFR_A].value ^ sfr->value;
       }
+      calculate_parity(memory);
       break;
     }
 
@@ -848,6 +882,7 @@ void run_program(Memory *memory) {
               memory->data_regs[SFR_A].value ^ sfr->value;
       }
 
+      calculate_parity(memory);
       break;
     }
 
@@ -864,6 +899,7 @@ void run_program(Memory *memory) {
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0x48;
       memory->data_regs[SFR_A].value =
           memory->data_regs[SFR_A].value ^ memory->data_ram[r_index];
+      calculate_parity(memory);
       break;
     }
 
@@ -894,13 +930,16 @@ void run_program(Memory *memory) {
     }
 
       // JMP @A+DPTR
-    case 0x73: 
-      memory->instraction_reg = memory->data_regs[SFR_A].value + memory->dptr;
+    case 0x73:{
+      uint16_t dptr = memory->data_regs[SFR_DPL].value | (memory->data_regs[SFR_DPH].value << 8);
+      memory->instraction_reg = memory->data_regs[SFR_A].value + dptr;
       break;
+    }
 
     // MOV A, #n
     case 0x74:
       memory->data_regs[SFR_A].value = memory->rom[++memory->instraction_reg];
+      calculate_parity(memory);
       break;
 
       // MOV location, #value
@@ -983,6 +1022,7 @@ void run_program(Memory *memory) {
     case 0x83: {
       uint16_t location = memory->instraction_reg + 1 + memory->data_regs[SFR_A].value;
       memory->data_regs[SFR_A].value = memory->rom[location];
+      calculate_parity(memory);
       break;
     }
 
@@ -1060,7 +1100,8 @@ void run_program(Memory *memory) {
     case 0x90: {
       uint8_t msb = memory->rom[++memory->instraction_reg];
       uint8_t lsb = memory->rom[++memory->instraction_reg];
-      memory->dptr = lsb | (msb << 8);
+      memory->data_regs[SFR_DPL].value = lsb;
+      memory->data_regs[SFR_DPH].value = msb;
       break;
     }
 
@@ -1088,14 +1129,18 @@ void run_program(Memory *memory) {
     }
 
       // MOVC A, @A+DPTR 
-    case 0x93:
-      memory->data_regs[SFR_A].value = memory->rom[memory->dptr + memory->data_regs[SFR_A].value];
+    case 0x93:{
+      uint16_t dptr = memory->data_regs[SFR_DPL].value | (memory->data_regs[SFR_DPH].value << 8);
+      memory->data_regs[SFR_A].value = memory->rom[dptr + memory->data_regs[SFR_A].value];
+      calculate_parity(memory);
       break;
+    }
 
       // SUBB A, #immideate
     case 0x94: {
       uint8_t value = memory->rom[++memory->instraction_reg];
       memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -1112,6 +1157,7 @@ void run_program(Memory *memory) {
       }
 
       memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      calculate_parity(memory);
       break;
     }
 
@@ -1132,9 +1178,10 @@ void run_program(Memory *memory) {
       }
 
       memory->data_regs[SFR_A].value = sub_8bit(value, memory);
+      calculate_parity(memory);
       break;
     }
-
+      // SUBB A, Rn
     case 0x98:
     case 0x99:
     case 0x9a:
@@ -1173,6 +1220,7 @@ void run_program(Memory *memory) {
 	memory->data_regs[SFR_A].value = memory->data_regs[SFR_A].value | (inv_state << 7);
       }
 
+      calculate_parity(memory);
       break;
     }
 
@@ -1199,9 +1247,12 @@ void run_program(Memory *memory) {
     }
 
       // INC DPTR
-    case 0xa3:
-      memory->dptr++;
+    case 0xa3:{
+      uint16_t dpl = memory->data_regs[SFR_DPL].value + 1;
+      if(dpl & 0x100) memory->data_regs[SFR_DPH].value++;
+      memory->data_regs[SFR_DPL].value = dpl;
       break;
+    }
 
       // MUL AB
     case 0xa4:{
@@ -1456,6 +1507,7 @@ void run_program(Memory *memory) {
       uint8_t acc = memory->data_regs[SFR_A].value;
       memory->data_regs[SFR_A].value = *l_ptr;
       *l_ptr = acc;
+      calculate_parity(memory);
       break;
     }
 
@@ -1475,6 +1527,7 @@ void run_program(Memory *memory) {
       uint8_t acc = memory->data_regs[SFR_A].value;
       memory->data_regs[SFR_A].value = *l_ptr;
       *l_ptr = acc;
+      calculate_parity(memory);
       break;
     }
 
@@ -1493,6 +1546,7 @@ void run_program(Memory *memory) {
       memory->data_ram[r_index + page * 8] = memory->data_regs[SFR_A].value;
       memory->data_regs[SFR_A].value = slot;
 
+      calculate_parity(memory);
       break;
     }
 
@@ -1552,6 +1606,7 @@ void run_program(Memory *memory) {
       else
 	memory->data_regs[SFR_PSW].value = memory->data_regs[SFR_PSW].value & 0x7f;
 
+      calculate_parity(memory);
       break;
     }
 
@@ -1601,6 +1656,7 @@ void run_program(Memory *memory) {
       memory->data_regs[SFR_A].value = acc_msb | replace_lsb;
       *replace = replace_msb | acc_lsb;
 
+      calculate_parity(memory);
       break;
     }
 
@@ -1625,9 +1681,12 @@ void run_program(Memory *memory) {
     }
 
       // MOVX A, @DPTR
-    case 0xe0: 
-      memory->data_regs[SFR_A].value = memory->xdata_ram[memory->dptr];
+    case 0xe0:{
+      uint16_t dptr = memory->data_regs[SFR_DPL].value | (memory->data_regs[SFR_DPH].value << 8);
+      memory->data_regs[SFR_A].value = memory->xdata_ram[dptr];
+      calculate_parity(memory);
       break;
+    }
 
       // MOVX A, @Ri
     case 0xe2:
@@ -1635,12 +1694,14 @@ void run_program(Memory *memory) {
       uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe2;
       memory->data_regs[SFR_A].value = memory->xdata_ram[memory->data_ram[r_index + 8 * page]];
+      calculate_parity(memory);
       break;
     }
 
       // CLR A
     case 0xe4: 
       memory->data_regs[SFR_A].value = 0;
+      calculate_parity(memory);
       break;
 
       // MOV A, direct
@@ -1655,9 +1716,11 @@ void run_program(Memory *memory) {
 	else memory->data_regs[SFR_A].value = sfr->value;
       }
 
+      calculate_parity(memory);
       break;
     }
 
+      // MOV A, @Ri
     case 0xe6:
     case 0xe7: {
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe6;
@@ -1673,6 +1736,7 @@ void run_program(Memory *memory) {
           memory->data_regs[SFR_A].value = sfr->value;
       }
 
+      calculate_parity(memory);
       break;
     }
       
@@ -1688,13 +1752,16 @@ void run_program(Memory *memory) {
       uint8_t page = (memory->data_regs[SFR_PSW].value & 0x18) >> 3;
       uint8_t r_index = memory->rom[memory->instraction_reg] - 0xe8;
       memory->data_regs[SFR_A].value = memory->data_ram[r_index + 8 * page];
+      calculate_parity(memory);
       break;
     }
 
       // MOVX @DPTR, A
-    case 0xf0:
-      memory->xdata_ram[memory->dptr] = memory->data_regs[SFR_A].value;
+    case 0xf0:{
+      uint16_t dptr = memory->data_regs[SFR_DPL].value | (memory->data_regs[SFR_DPH].value << 8);
+      memory->xdata_ram[dptr] = memory->data_regs[SFR_A].value;
       break;
+    }
 
       // MOVX @Ri, A
     case 0xf2:
@@ -1708,6 +1775,7 @@ void run_program(Memory *memory) {
       // CPL A
     case 0xf4:
       memory->data_regs[SFR_A].value = ~memory->data_regs[SFR_A].value;
+      calculate_parity(memory);
       break;
 
       // MOV direct, A

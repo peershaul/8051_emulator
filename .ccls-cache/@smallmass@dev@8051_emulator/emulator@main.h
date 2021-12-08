@@ -43,7 +43,6 @@ typedef struct Memory {
   SFR data_regs[21];
   uint8_t xdata_ram[0x10000];
   uint8_t rom[0x10000];
-  uint16_t dptr;
 } Memory;
 
 

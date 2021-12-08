@@ -1,4 +1,4 @@
-	ORL PSW, #18H
-	mov 26, #10
-	mov A, #0
-	add A, R2
+	mov A, #3H
+	mov A, #4H
+	mov A, #0F0H
+	
